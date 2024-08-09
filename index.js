@@ -7,11 +7,9 @@ const {
   GIST_ID: gistId,
   GITHUB_TOKEN: githubToken,
   STRAVA_ATHLETE_ID: stravaAtheleteId,
-  STRAVA_ACCESS_TOKEN: stravaAccessToken,
   STRAVA_REFRESH_TOKEN: stravaRefreshToken,
   STRAVA_CLIENT_ID: stravaClientId,
   STRAVA_CLIENT_SECRET: stravaClientSecret,
-  UNITS: units
 } = process.env;
 const API_BASE = "https://www.strava.com/api/v3/athletes/";
 const AUTH_CACHE_FILE = "strava-auth.json";
@@ -21,7 +19,7 @@ const octokit = new Octokit({
 });
 
 async function main() {
-  const stats = await getStravaStats();
+  const stats = await getStravaActivities();
   await updateGist(stats);
 }
 
@@ -81,6 +79,19 @@ async function getStravaStats() {
   return json;
 }
 
+
+async function getStravaActivities() {
+  const API = 'https://www.strava.com/api/v3/athlete/activities?per_page=5';
+
+  const json = await fetch(API, {
+    method: 'get',
+    headers: {
+      'Authorization': `Bearer ${await getStravaToken()}`
+    }
+  }).then(data => data.json());
+  return json;
+}
+
 async function updateGist(data) {
   let gist;
   try {
@@ -89,86 +100,15 @@ async function updateGist(data) {
     console.error(`Unable to get gist\n${error}`);
     throw error;
   }
-
-  // Used to index the API response
-  const keyMappings = {
-    Running: {
-      key: "ytd_run_totals"
-    },
-    Swimming: {
-      key: "ytd_swim_totals"
-    },
-    Cycling: {
-      key: "ytd_ride_totals"
-    }
-  };
-
-  let totalDistance = 0;
-
-  let lines = Object.keys(keyMappings).map(activityType => {
-    // Store the activity name and distance
-    const { key } = keyMappings[activityType];
-    try {
-      const { distance, moving_time } = data[key];
-      totalDistance += distance;
-      return {
-        name: activityType,
-        pace: distance * 3600 / (moving_time ? moving_time : 1),
-        distance
-      };
-    } catch (error) {
-      console.error(`Unable to get distance\n${error}`);
-      return {
-        name: activityType,
-        pace: 0,
-        distance: 0
-      };
-    }
-  }).map(activity => {
-    // Calculate the percentages and bar charts for the 3 activities
-    const percent = (activity["distance"] / totalDistance) * 100;
-    const pacePH = formatDistance(activity["pace"]);
-    const pace = pacePH.substring(0, pacePH.length - 3);  // strip unit
-    return {
-      ...activity,
-      distance: formatDistance(activity["distance"]),
-      pace: `${pace}/h`,
-      barChart: generateBarChart(percent, 19)
-    };
-  }).map(activity => {
-    // Format the data to be displayed in the Gist
-    const { name, distance, pace, barChart } = activity;
-    return `${name.padEnd(10)} ${distance.padStart(
-      13
-    )} ${barChart} ${pace.padStart(7)}`;
-  });
-
-  // Last 4 weeks
-  let monthDistance = 0;
-  let monthTime = 0;
-  let monthAchievements = 0;
-  for (let [key, value] of Object.entries(data)){
-    if (key.startsWith("recent_") && key.endsWith("_totals")){
-      monthDistance += value["distance"];
-      monthTime += value["moving_time"];
-      monthAchievements += value["achievement_count"];
-    }
+  lines = []
+  for (let activity of data) {
+    distance = (activity.distance / 1000).toFixed(2);
+    average_speed = 1000 / activity.average_speed;
+    average_speed_str = ((average_speed / 60) + '').padStart(2, '0') + ':' + ((average_speed % 60) + '').padStart(2, '0');
+    type = activity.type.padEnd(4);
+    start_date = activity.start_date.substring(0, 10);
+    lines.push(`${type} | ${start_date} | ${distance}km | ${average_speed_str}/km`);
   }
-  lines.push(
-    `Last month ${
-      formatDistance(monthDistance).padStart(13)
-    } ${
-      (
-        monthAchievements
-        ? `${monthAchievements} achievement${monthAchievements > 1 ? "s" : ""}`
-        : ""
-      ).padStart(19)
-    } ${
-      `${(monthTime / 3600).toFixed(0)}`.padStart(3)
-    }:${
-      (monthTime / 60).toFixed(0) % 60
-    }h`
-  );
 
   try {
     // Get original filename to update that same file
@@ -177,7 +117,7 @@ async function updateGist(data) {
       gist_id: gistId,
       files: {
         [filename]: {
-          filename: `YTD Strava Metrics`,
+          filename: `Recent Strava Activities`,
           content: lines.join("\n")
         }
       }
@@ -186,43 +126,6 @@ async function updateGist(data) {
     console.error(`Unable to update gist\n${error}`);
     throw error;
   }
-}
-
-function generateBarChart(percent, size) {
-  const syms = "░▏▎▍▌▋▊▉█";
-
-  const frac = Math.floor((size * 8 * percent) / 100);
-  const barsFull = Math.floor(frac / 8);
-  if (barsFull >= size) {
-    return syms.substring(8, 9).repeat(size);
-  }
-  const semi = frac % 8;
-
-  return [
-    syms.substring(8, 9).repeat(barsFull),
-    syms.substring(semi, semi + 1),
-  ].join("").padEnd(size, syms.substring(0, 1));
-}
-
-function formatDistance(distance) {
-  switch (units) {
-    case "meters":
-      return `${metersToKm(distance)} km`;
-    case "miles":
-      return `${metersToMiles(distance)} mi`;
-    default:
-      return `${metersToKm(distance)} km`;
-  }
-}
-
-function metersToMiles(meters) {
-  const CONVERSION_CONSTANT = 0.000621371192;
-  return (meters * CONVERSION_CONSTANT).toFixed(2);
-}
-
-function metersToKm(meters) {
-  const CONVERSION_CONSTANT = 0.001;
-  return (meters * CONVERSION_CONSTANT).toFixed(2);
 }
 
 (async () => {
