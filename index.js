@@ -103,7 +103,7 @@ async function updateGist(data) {
   lines = []
   for (let activity of data) {
     distance = (activity.distance / 1000).toFixed(2);
-    average_speed = 1000 / activity.average_speed;
+    average_speed = Math.round(1000 / activity.average_speed);
     average_speed_str = ((average_speed / 60) + '').padStart(2, '0') + ':' + ((average_speed % 60) + '').padStart(2, '0');
     type = activity.type.padEnd(4);
     start_date = activity.start_date.substring(0, 10);
