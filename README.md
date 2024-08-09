@@ -8,7 +8,7 @@
 ## Update
 
 Support show recent activities.
-Refresh Token should be generated from web.
+Refresh token should be generated from web.
 1. get code from web auth.
 2. get refresh token by client id,client secret and code.
 
