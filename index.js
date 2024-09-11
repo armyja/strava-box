@@ -13,7 +13,6 @@ const {
   STRAVA_CLIENT_SECRET: stravaClientSecret,
   KEY: key
 } = process.env;
-const API_BASE = "https://www.strava.com/api/v3/athletes/";
 
 const octokit = new Octokit({
   auth: `token ${githubToken}`
@@ -82,20 +81,8 @@ async function getStravaToken(){
   return cache.stravaAccessToken;
 }
 
-/**
- * Fetches your data from the Strava API
- * The distance returned by the API is in meters
- */
-async function getStravaStats() {
-  const API = `${API_BASE}${stravaAtheleteId}/stats?access_token=${await getStravaToken()}`;
-
-  const json = await fetch(API).then(data => data.json());
-  return json;
-}
-
-
 async function getStravaActivities() {
-  const API = 'https://www.strava.com/api/v3/athlete/activities?per_page=5';
+  const API = 'https://www.strava.com/api/v3/athlete/activities?per_page=10';
 
   const json = await fetch(API, {
     method: 'get',
@@ -116,12 +103,18 @@ async function updateGist(data) {
   }
   lines = []
   for (let activity of data) {
+    if (activity.type !== 'Run') {
+        continue
+    }
     distance = (activity.distance / 1000).toFixed(2);
     average_speed = Math.round(1000 / activity.average_speed);
     average_speed_str = (Math.floor(average_speed / 60) + '').padStart(2, '0') + ':' + ((average_speed % 60) + '').padStart(2, '0');
     type = activity.type.padEnd(4);
     start_date = activity.start_date.substring(0, 10);
     lines.push(`${type} ${start_date} ${distance}km ${average_speed_str}/km`);
+    if (lines.length === 5) {
+        break;
+    }
   }
 
   try {
