@@ -11,6 +11,7 @@ const {
   STRAVA_ATHLETE_ID: stravaAtheleteId,
   STRAVA_CLIENT_ID: stravaClientId,
   STRAVA_CLIENT_SECRET: stravaClientSecret,
+  KEY: key
 } = process.env;
 const API_BASE = "https://www.strava.com/api/v3/athletes/";
 
