@@ -1,18 +1,18 @@
 require("dotenv").config();
 const Octokit = require("@octokit/rest");
 const fetch = require("node-fetch");
-const fs = require("fs");
+var AES = require("crypto-js/aes");
+var CryptoJS = require("crypto-js");
 
 const {
+  TOKEN_GIST_ID: tokenGistId,
   GIST_ID: gistId,
-  GITHUB_TOKEN: githubToken,
+  GH_TOKEN: githubToken,
   STRAVA_ATHLETE_ID: stravaAtheleteId,
-  STRAVA_REFRESH_TOKEN: stravaRefreshToken,
   STRAVA_CLIENT_ID: stravaClientId,
   STRAVA_CLIENT_SECRET: stravaClientSecret,
 } = process.env;
 const API_BASE = "https://www.strava.com/api/v3/athletes/";
-const AUTH_CACHE_FILE = "strava-auth.json";
 
 const octokit = new Octokit({
   auth: `token ${githubToken}`
@@ -27,21 +27,21 @@ async function main() {
  * Updates cached strava authentication tokens if necessary
  */
 async function getStravaToken(){
-  // default env vars
-  let cache = {
-    // stravaAccessToken: stravaAccessToken,
-    stravaRefreshToken: stravaRefreshToken
-  };
-  // read cache from disk
+  let gist;
   try {
-    const jsonStr = fs.readFileSync(AUTH_CACHE_FILE);
-    const c = JSON.parse(jsonStr);
-    Object.keys(c).forEach(key => {
-      cache[key] = c[key];
-    });
+    gist = await octokit.gists.get({ gist_id: tokenGistId });
   } catch (error) {
-    console.log(error);
+    console.error(`Unable to get gist\n${error}`);
+    throw error;
   }
+
+  let cache = {
+    stravaAccessToken: "",
+    stravaRefreshToken: ""
+  }
+  const filename = Object.keys(gist.data.files)[0];
+  cache.stravaRefreshToken = AES.decrypt(gist.data.files[filename].content, key).toString(CryptoJS.enc.Utf8);
+
   console.debug(`ref: ${cache.stravaRefreshToken.substring(0,6)}`);
 
   // get new tokens
@@ -62,8 +62,21 @@ async function getStravaToken(){
   console.debug(`acc: ${cache.stravaAccessToken.substring(0,6)}`);
   console.debug(`ref: ${cache.stravaRefreshToken.substring(0,6)}`);
 
-  // save to disk
-  fs.writeFileSync(AUTH_CACHE_FILE, JSON.stringify(cache));
+  // save to gist
+  try {
+    await octokit.gists.update({
+      gist_id: tokenGistId,
+      files: {
+        [filename]: {
+          filename: `encrypted_token`,
+          content: AES.encrypt(cache.stravaRefreshToken, key).toString()
+        }
+      }
+    });
+  } catch (error) {
+    console.error(`Unable to update gist\n${error}`);
+    throw error;
+  }
 
   return cache.stravaAccessToken;
 }
@@ -107,7 +120,7 @@ async function updateGist(data) {
     average_speed_str = (Math.floor(average_speed / 60) + '').padStart(2, '0') + ':' + ((average_speed % 60) + '').padStart(2, '0');
     type = activity.type.padEnd(4);
     start_date = activity.start_date.substring(0, 10);
-    lines.push(`${type} | ${start_date} | ${distance}km | ${average_speed_str}/km`);
+    lines.push(`${type} ${start_date} ${distance}km ${average_speed_str}/km`);
   }
 
   try {
