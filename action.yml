@@ -1,0 +1,6 @@
+name: "strava-box"
+author: "armyja"
+description: "将你最近的strava运动记录更新到 Gist"
+runs:
+  using: "node12"
+  main: "./index.js"
