@@ -11,7 +11,7 @@ Support show recent running activities.
 Refresh token should be generated from web.
 1. get code from web auth.
 2. get refresh token by client id,client secret and code.
-3. save refresh token (encrypted using AES) at specified gist. 
+3. save refresh token (encrypted using AES) at specified gist.  
 
 ## Previous Work
 
